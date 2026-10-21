@@ -1,0 +1,9 @@
+/target/
+/data/
+.env
+*.log
+*.jks
+*service-account*.json
+
+/school-run-backend/
+.DS_Store

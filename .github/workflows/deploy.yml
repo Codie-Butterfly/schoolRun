@@ -1,0 +1,74 @@
+name: Test and deploy School Run
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: school-run-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Test and package
+        run: mvn --batch-mode verify
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - uses: docker/build-push-action@v6
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/school-run-service:${{ github.sha }}
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure verified SSH host
+        env:
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$KNOWN_HOSTS"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          sudo apt-get update && sudo apt-get install -y sshpass
+      - name: Deploy School Run only
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SCP_USERNAME: ${{ secrets.SCP_USERNAME }}
+          SSHPASS: ${{ secrets.SCP_PASSWORD }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          IMAGE: ${{ secrets.DOCKER_USERNAME }}/school-run-service:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$DOCKER_USERNAME" =~ ^[a-z0-9_-]+$ ]]
+          target="${SCP_USERNAME}@${SERVER_IP}"
+          remote=$(sshpass -e ssh -o StrictHostKeyChecking=yes "$target" 'mktemp -d /tmp/school-run-deploy.XXXXXX')
+          [[ "$remote" =~ ^/tmp/school-run-deploy\.[a-zA-Z0-9]+$ ]]
+          sshpass -e scp -o StrictHostKeyChecking=yes compose.production.yaml deploy/deploy.sh "$target:$remote/"
+          printf '%s' "$DOCKER_PASSWORD" | sshpass -e ssh -o StrictHostKeyChecking=yes "$target" "sudo docker login -u '$DOCKER_USERNAME' --password-stdin"
+          sshpass -e ssh -o StrictHostKeyChecking=yes "$target" "sudo install -d -m 750 /opt/school-run && sudo install -m 640 '$remote/compose.production.yaml' /opt/school-run/compose.production.yaml && sudo install -m 750 '$remote/deploy.sh' /opt/school-run/deploy.sh && sudo bash /opt/school-run/deploy.sh '$IMAGE' && rm -rf '$remote'"
+      - name: Verify public HTTPS endpoint
+        env:
+          HEALTH_URL: ${{ vars.SCHOOLRUN_HEALTH_URL }}
+        run: |
+          [[ "$HEALTH_URL" == https://* ]] || { echo 'Set SCHOOLRUN_HEALTH_URL to the configured public HTTPS health URL'; exit 1; }
+          curl --fail --show-error --retry 6 --retry-delay 5 "$HEALTH_URL"

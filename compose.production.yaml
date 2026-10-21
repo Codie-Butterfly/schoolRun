@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  api:
+    image: ${SCHOOLRUN_IMAGE:?Set SCHOOLRUN_IMAGE}
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:9200:9200'
+    env_file: .env
+    environment:
+      BIND_ADDRESS: 0.0.0.0
+      DATABASE_URL: jdbc:h2:file:/app/data/schoolrun;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+      UPLOADS_DIR: /app/data/private-files
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9200/api/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 768m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
