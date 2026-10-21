@@ -1,0 +1,7 @@
+# Inside the existing HTTPS server block, before its fallback handle.
+handle_path /school-run/* {
+    request_body {
+        max_size 9MB
+    }
+    reverse_proxy school-run-api:9200
+}

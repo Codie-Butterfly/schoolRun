@@ -18,7 +18,15 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    networks:
+      proxy:
+        aliases: [school-run-api]
     mem_limit: 768m
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+
+networks:
+  proxy:
+    external: true
+    name: hyperfeeds-network
