@@ -1,6 +1,8 @@
 # School Run GitHub Actions deployment
 
-Status: local deployment files prepared; repository, VPS provisioning, secrets and first run are not configured yet.
+Repository: https://github.com/Codie-Butterfly/schoolRun
+
+Status: workflow prepared; VPS provisioning, secrets and first deployment remain pending.
 
 The backend runs separately from Chef Tarie and Hyperfeeds on their VPS, 62.171.128.245. It uses `/opt/school-run`, a dedicated Docker Compose project, and a persistent data directory. Port 9200 is bound only to VPS loopback. The existing HTTPS reverse proxy must route `/school-run/` to it before phone APKs are built. The proposed API URL is `https://62.171.128.245/school-run/api`, subject to verification of the VPS certificate and proxy configuration.
 
