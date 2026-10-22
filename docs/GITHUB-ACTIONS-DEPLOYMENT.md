@@ -2,7 +2,7 @@
 
 Repository: https://github.com/Codie-Butterfly/schoolRun
 
-Status: workflow prepared; VPS provisioning, secrets and first deployment remain pending.
+Status: VPS data migration and Caddy routing prepared on 22 October 2026. GitHub deployment secrets and variables are configured; first live deployment is being verified.
 
 The backend runs separately from Chef Tarie and Hyperfeeds on their VPS, 62.171.128.245. It uses `/opt/school-run`, a dedicated Docker Compose project, and a persistent data directory. Port 9200 is bound only to VPS loopback. The existing HTTPS reverse proxy must route `/school-run/` to it before phone APKs are built. The proposed API URL is `https://62.171.128.245/school-run/api`, subject to verification of the VPS certificate and proxy configuration.
 
@@ -40,3 +40,5 @@ Merge `deploy/Caddyfile.snippet` into `/opt/hyperfeeds-web/Caddyfile` without re
 The deploy script pulls the new image before stopping School Run, backs up its stopped database and uploads, then replaces only its API container. Health checks gate success. On failure it restores the previous image and data snapshot when available. Backups contain private information and remain in `/opt/school-run/backups` with restricted access. No global Docker prune or other application's restart is performed.
 
 First deployment needs no real Paynow credentials. Build the phone APK only after both local and external HTTPS health checks succeed. Supply that HTTPS API URL through `API_BASE_URL`.
+
+The existing development database and private uploads were copied to VPS storage with user approval. They are excluded from GitHub and the container image. Paynow remains disabled.
