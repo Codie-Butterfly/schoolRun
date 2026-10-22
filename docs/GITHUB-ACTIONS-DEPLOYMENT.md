@@ -42,3 +42,7 @@ The deploy script pulls the new image before stopping School Run, backs up its s
 First deployment needs no real Paynow credentials. Build the phone APK only after both local and external HTTPS health checks succeed. Supply that HTTPS API URL through `API_BASE_URL`.
 
 The existing development database and private uploads were copied to VPS storage with user approval. They are excluded from GitHub and the container image. Paynow remains disabled.
+
+## Temporary subscription test mode
+
+The VPS Compose configuration enables `MOCK_SUBSCRIPTIONS=true`. Existing and new enrolled children pass subscription checks without payment. Payment initiation is blocked. Newly accrued test-month charges have zero value; existing real billing records are retained and hidden from the test subscription summary. Family service disabling and timetable cancellations still apply. Set this flag to false to restore real billing; review retained historical charges before doing so.

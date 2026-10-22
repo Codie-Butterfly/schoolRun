@@ -8,6 +8,7 @@ services:
     env_file: .env
     environment:
       BIND_ADDRESS: 0.0.0.0
+      MOCK_SUBSCRIPTIONS: "true"
       DATABASE_URL: jdbc:h2:file:/app/data/schoolrun;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
       UPLOADS_DIR: /app/data/private-files
     volumes:

@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 @Component public class Store {
  @org.springframework.beans.factory.annotation.Value("${schoolrun.subscription-unit}") String billingUnit;
+ @org.springframework.beans.factory.annotation.Value("${schoolrun.mock-subscriptions:false}") boolean mockSubscriptions;
  final JdbcTemplate db;final ObjectMapper json;final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder(12);
  public Store(JdbcTemplate db,ObjectMapper json){this.db=db;this.json=json;}
  static final ZoneId ZONE=ZoneId.of("Africa/Harare");
@@ -40,12 +41,13 @@ import java.security.*;
    var dates=db.queryForList("SELECT starts FROM sr_child_billing_start WHERE child_id=?",c.get("id"));boolean legacy=dates.isEmpty();if(legacy)db.update("INSERT INTO sr_child_billing_start VALUES(?,?)",c.get("id"),now);
    var start=legacy?now:LocalDate.parse(dates.get(0).get("starts").toString());var active=LocalDate.parse(service.get("active_since").toString());if(start.isBefore(active))start=active;
    for(var month=YearMonth.from(start);!month.isAfter(YearMonth.from(now));month=month.plusMonths(1)){
-    boolean covered=legacy&&db.queryForObject("SELECT count(*) FROM sr_entitlement WHERE link_id=? AND billing_month=?",Integer.class,link,month.toString())>0;
-    db.update("INSERT INTO sr_child_charge(child_id,billing_month,amount,paid) SELECT ?,?,1,? WHERE NOT EXISTS(SELECT 1 FROM sr_child_charge WHERE child_id=? AND billing_month=?)",c.get("id"),month.toString(),covered,c.get("id"),month.toString());
+    boolean covered=mockSubscriptions||(legacy&&db.queryForObject("SELECT count(*) FROM sr_entitlement WHERE link_id=? AND billing_month=?",Integer.class,link,month.toString())>0);
+    db.update("INSERT INTO sr_child_charge(child_id,billing_month,amount,paid) SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM sr_child_charge WHERE child_id=? AND billing_month=?)",c.get("id"),month.toString(),mockSubscriptions?0:1,covered,c.get("id"),month.toString());
    }
   }
  }
  boolean paid(Object link,String month){
+  if(mockSubscriptions)return true;
   int charges=db.queryForObject("SELECT count(*) FROM sr_child_charge q JOIN sr_child c ON c.id=q.child_id WHERE c.link_id=? AND q.billing_month=?",Integer.class,link,month);
   if(charges>0)return db.queryForObject("SELECT count(*) FROM sr_child_charge q JOIN sr_child c ON c.id=q.child_id WHERE c.link_id=? AND q.billing_month=? AND q.paid=false",Integer.class,link,month)==0;
   return db.queryForObject("SELECT count(*) FROM sr_entitlement WHERE link_id=? AND billing_month=?",Integer.class,link,month)>0;
