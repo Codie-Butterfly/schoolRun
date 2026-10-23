@@ -13,10 +13,24 @@ import static com.codiebutterfly.schoolrun.Store.*;
  Marketplace(Store s,Journeys journeys,@Value("${schoolrun.uploads}")String uploads){this.s=s;this.journeys=journeys;this.uploads=Path.of(uploads);}
  int seats(Object driver){var u=s.one("SELECT * FROM sr_user WHERE id=?",driver);Map<String,Object> profile=s.decode(u.get("profile"));int count=s.db.queryForObject("SELECT count(*) FROM sr_child c JOIN sr_link l ON l.id=c.link_id WHERE l.driver_id=?",Integer.class,driver);return Math.max(0,((Number)profile.get("capacity")).intValue()-count);}
  boolean enabled(Map<String,Object>b,String key){if(b.containsKey(key)&&!(b.get(key) instanceof Boolean))throw error(400,"Invalid matching switch");return !Boolean.FALSE.equals(b.get(key));}
+ List<Map<String,Object>> places(Map<String,Object>b,boolean home,boolean validate){
+ String key=home?"areas":"schools";Object raw=b.get(key);
+ if(raw==null)raw=List.of(b);
+ if(!(raw instanceof List<?> list)||list.isEmpty()||list.size()>30)throw error(400,"Add between 1 and 30 "+key);
+ var result=new ArrayList<Map<String,Object>>();
+ for(Object item:list){if(!(item instanceof Map<?,?>))throw error(400,"Invalid "+key+" entry");
+ @SuppressWarnings("unchecked") var v=(Map<String,Object>)item;
+ if(!validate){result.add(v);continue;}
+ var place=new LinkedHashMap<String,Object>();String name=home?"area":"school",lat=home?"homeLat":"schoolLat",lng=home?"homeLng":"schoolLng";
+ place.put(name,text(v,name,300));place.put(lat,coordinate(v,lat,90));place.put(lng,coordinate(v,lng,180));
+ if(home){double radius=coordinate(v,"radiusKm",30);if(radius<1)throw error(400,"Choose a service radius from 1 to 30 km");place.put("radiusKm",radius);}result.add(place);
+ }return result;
+ }
  Map<String,Object> route(Map<String,Object>b){var r=new LinkedHashMap<String,Object>();boolean home=enabled(b,"matchPickupArea"),school=enabled(b,"matchSchool");r.put("limitEnrolment",enabled(b,"limitEnrolment"));r.put("matchPickupArea",home);r.put("matchSchool",school);
- if(home){r.put("area",text(b,"area",300));r.put("homeLat",coordinate(b,"homeLat",90));r.put("homeLng",coordinate(b,"homeLng",180));double radius=coordinate(b,"radiusKm",30);if(radius<1)throw error(400,"Choose a service radius from 1 to 30 km");r.put("radiusKm",radius);}
- if(school){r.put("school",text(b,"school",300));r.put("schoolLat",coordinate(b,"schoolLat",90));r.put("schoolLng",coordinate(b,"schoolLng",180));}return r;}
- boolean matches(Map<String,Object>r,Map<String,Object>b){return (!enabled(r,"matchPickupArea")||RoutePlanner.distance(((Number)r.get("homeLat")).doubleValue(),((Number)r.get("homeLng")).doubleValue(),coordinate(b,"homeLat",90),coordinate(b,"homeLng",180))<=((Number)r.get("radiusKm")).doubleValue())&&(!enabled(r,"matchSchool")||RoutePlanner.distance(((Number)r.get("schoolLat")).doubleValue(),((Number)r.get("schoolLng")).doubleValue(),coordinate(b,"schoolLat",90),coordinate(b,"schoolLng",180))<=1);}
+ if(home){var list=places(b,true,true);r.put("areas",list);r.putAll(list.get(0));}
+ if(school){var list=places(b,false,true);r.put("schools",list);r.putAll(list.get(0));}return r;}
+ boolean matches(Map<String,Object>r,Map<String,Object>b){return (!enabled(r,"matchPickupArea")||places(r,true,false).stream().anyMatch(p->RoutePlanner.distance(((Number)p.get("homeLat")).doubleValue(),((Number)p.get("homeLng")).doubleValue(),coordinate(b,"homeLat",90),coordinate(b,"homeLng",180))<=((Number)p.get("radiusKm")).doubleValue()))&&(!enabled(r,"matchSchool")||places(r,false,false).stream().anyMatch(p->RoutePlanner.distance(((Number)p.get("schoolLat")).doubleValue(),((Number)p.get("schoolLng")).doubleValue(),coordinate(b,"schoolLat",90),coordinate(b,"schoolLng",180))<=1));}
+
  @GetMapping("/listing") Object listing(@RequestHeader(value="Authorization",required=false)String a){var u=s.user(a);s.role(u,"DRIVER");var rows=s.db.queryForList("SELECT * FROM sr_driver_listing WHERE driver_id=?",u.get("id"));if(rows.isEmpty())return Map.of("available",false,"shareLicence",false,"seats",seats(u.get("id")));var row=rows.get(0);return Map.of("available",row.get("available"),"shareLicence",row.get("share_licence"),"route",s.decode(row.get("route_details")),"seats",seats(u.get("id")));}
  @PutMapping("/listing") @Transactional Object publish(@RequestHeader(value="Authorization",required=false)String a,@RequestBody Map<String,Object>b){var u=s.user(a);s.role(u,"DRIVER");s.one("SELECT id FROM sr_user WHERE id=? FOR UPDATE",u.get("id"));var r=route(b);boolean available=Boolean.TRUE.equals(b.get("available")),share=Boolean.TRUE.equals(b.get("shareLicence"));s.db.update("DELETE FROM sr_driver_listing WHERE driver_id=?",u.get("id"));s.db.update("INSERT INTO sr_driver_listing VALUES(?,?,?,?)",u.get("id"),available,share,s.encode(r));return listing(a);}
  @PutMapping("/availability") @Transactional Object availability(@RequestHeader(value="Authorization",required=false)String a,@RequestBody Map<String,Object>b){var u=s.user(a);s.role(u,"DRIVER");s.one("SELECT id FROM sr_user WHERE id=? FOR UPDATE",u.get("id"));if(s.db.update("UPDATE sr_driver_listing SET available=? WHERE driver_id=?",Boolean.TRUE.equals(b.get("available")),u.get("id"))==0)throw error(400,"Publish your service route first");return listing(a);}

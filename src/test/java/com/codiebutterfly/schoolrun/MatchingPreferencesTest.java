@@ -16,4 +16,16 @@ class MatchingPreferencesTest {
  assertThrows(RuntimeException.class,()->market.route(Map.of("matchPickupArea",true,"matchSchool",false)));
  assertThrows(RuntimeException.class,()->market.route(Map.of("matchPickupArea","false","matchSchool",false)));
  }
+ @Test void matchesAnyAreaAndAnySchoolAndValidatesEveryEntry(){
+ var a=Map.<String,Object>of("area","A","homeLat",-17.0,"homeLng",31.0,"radiusKm",2);
+ var b=Map.<String,Object>of("area","B","homeLat",-18.0,"homeLng",32.0,"radiusKm",2);
+ var x=Map.<String,Object>of("school","X","schoolLat",-17.1,"schoolLng",31.1);
+ var y=Map.<String,Object>of("school","Y","schoolLat",-18.1,"schoolLng",32.1);
+ var route=market.route(Map.of("areas",List.of(a,b),"schools",List.of(x,y)));
+ assertTrue(market.matches(route,Map.of("homeLat",-18.0,"homeLng",32.0,"schoolLat",-18.1,"schoolLng",32.1)));
+ assertTrue(market.matches(route,Map.of("homeLat",-17.0,"homeLng",31.0,"schoolLat",-18.1,"schoolLng",32.1)));
+ assertFalse(market.matches(route,Map.of("homeLat",-19.0,"homeLng",32.0,"schoolLat",-18.1,"schoolLng",32.1)));
+ assertThrows(RuntimeException.class,()->market.route(Map.of("areas",List.of(),"schools",List.of(x))));
+ assertThrows(RuntimeException.class,()->market.route(Map.of("areas",List.of(a,Map.of("area","Invalid")),"schools",List.of(x))));
+ }
 }
